@@ -4,12 +4,12 @@
 import os
 import time
 
-import dotenv  # requirements: python-dotenv
+import dotenv  # python-dotenv
 from openai import OpenAI
 
 class GptManager:
     MAX_MSG_LIMIT = 20
-    MAX_REQUESTS_PER_SECOND = 3
+    MAX_REQUESTS_PER_SECOND = 4
 
     def __init__(self, token:str = None):
         self.max_msg_limit = self.MAX_MSG_LIMIT
@@ -21,7 +21,7 @@ class GptManager:
         else:
             self.token = token
 
-    def send_request(self, text:str = ''):
+    def send_request(self, text:str):
         """
         Sends request to GPT.
         Messages list format: [
@@ -39,26 +39,27 @@ class GptManager:
         :type messages: list
         :return: Returns string
         """
+
         client = OpenAI(api_key=self.token)
-        if text != '' and len(self.messages) == 0:
-            chat_completion = client.chat.completions.create(
-                messages=[ {"role": "user", "content": text} ],
-                model="gpt-4o-mini",
-            )
-        else:
-            raise Exception("send_request: No content to send")
+        self.messages.append({"role": "user", "content": text})
+        chat_completion = client.chat.completions.create(
+            messages=self.messages,
+            model="gpt-4o-mini",
+        )
 
-        time.sleep(round(1 / self.MAX_REQUESTS_PER_SECOND))
-        return chat_completion.choices[0].message.content
+        response_content = chat_completion.choices[0].message.content
+        self.messages.append({"role": "assistant", "content": text})
+        self.apply_msg_limit()
+        return response_content
 
+    def set_sys_content(self, instruction_text):
+        self.messages = [message for message in self.messages if message["role"] != "system"]
+        self.messages.insert(0, {"role": "system", "content": instruction_text})
 
-
-    def set_rps_limit(self, value: int):
-        """
-        Sets the rate limit for requests per second. Allows to control
-        the maximum number of requests that can be made per second
-        """
-        pass
+    def apply_msg_limit(self):
+        limit = self.max_msg_limit
+        while len(self.messages) > limit and len(self.messages) > 1:
+            self.messages.pop(1)
 
     @staticmethod
     def find_api_token():
@@ -71,10 +72,12 @@ class GptManager:
             raise Exception("os.getenv: no token")
         return token
 
-def main():
-    client = GptClient()
-    respond = client.send_request("Привет")
+def test1():
+    gpt_mng = GptManager()
+    gpt_mng.max_msg_limit = 4
+    gpt_mng.set_sys_content("Обычный чат гпт")
+    respond = gpt_mng.send_request("Привет")
     print(respond)
 
 if __name__ == '__main__':
-    main()
+    test1()
