@@ -3,6 +3,8 @@
 
 import os
 import time
+from redis_based_rate_limiter import rate_limiter
+from redis_based_rate_limiter import ensure_delay
 
 import dotenv  # python-dotenv
 from openai import OpenAI
@@ -21,6 +23,7 @@ class GptManager:
         else:
             self.token = token
 
+    @rate_limiter('gpt_manager', 10, 1)
     def send_request(self, text:str):
         """
         Sends request to GPT.
@@ -35,8 +38,6 @@ class GptManager:
 
         :param text: (opt) If sending just one question
         :type text: str
-        :param messages: (opt) a list of messages in the format shown above
-        :type messages: list
         :return: Returns string
         """
 
@@ -52,6 +53,7 @@ class GptManager:
         self.apply_msg_limit()
         return response_content
 
+    @rate_limiter('gpt_manager', 10, 1)
     def set_sys_content(self, instruction_text):
         self.messages = [message for message in self.messages if message["role"] != "system"]
         self.messages.insert(0, {"role": "system", "content": instruction_text})
@@ -76,8 +78,33 @@ def test1():
     gpt_mng = GptManager()
     gpt_mng.max_msg_limit = 4
     gpt_mng.set_sys_content("Обычный чат гпт")
-    respond = gpt_mng.send_request("Привет")
-    print(respond)
+    respond = gpt_mng.send_request("Скажи 'раз'")
+    if not respond:
+        print(f"GPT API перегружен! Попробуйте позже ({respond})")
+    else:
+        print(respond)
+
+    time.sleep(1)
+    respond = gpt_mng.send_request("Скажи 'два!'")
+    if not respond:
+        print(f"GPT API перегружен! Попробуйте позже ({respond})")
+    else:
+        print(respond)
+
+    respond = gpt_mng.send_request("Скажи 'три'")
+    if not respond:
+        print(f"GPT API перегружен! Попробуйте позже ({respond})")
+    else:
+        print(respond)
 
 if __name__ == '__main__':
     test1()
+
+    # import redis
+    # redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, decode_responses=True)
+    # print(redis_client.get("gpt_manager_call_counter"))
+    # redis_client.delete("gpt_manager_call_counter")
+
+    # import redis
+    # redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, decode_responses=True)
+    # redis_client.delete("gpt_manager_call_counter")
